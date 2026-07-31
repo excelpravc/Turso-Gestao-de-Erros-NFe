@@ -3,7 +3,7 @@
 // PUT genérico em config.js, pois tem lógica própria).
 //
 // PUT /api/tenant/senha-sistema?tenantId=X   body: { atual, nova }
-const { getTenantClient, getAdminClient } = require('../../lib/tursoClient');
+const { getTenantClient, getAdminClient } = require('./_tursoClient');
 
 module.exports = async function handler(req, res) {
   if (req.method !== 'PUT') return res.status(405).json({ ok: false, error: 'Method not allowed' });
