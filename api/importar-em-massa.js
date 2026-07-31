@@ -3,7 +3,7 @@
 //
 // POST   /api/tenant/importar-em-massa?tenantId=X&colecao=lojas   body: { rows: [...] }
 // DELETE /api/tenant/importar-em-massa?tenantId=X&colecao=lojas   (limpa a coleção inteira)
-const { getTenantClient } = require('../../lib/tursoClient');
+const { getTenantClient } = require('./_tursoClient');
 
 const TABELAS_PAYLOAD = new Set([
   'compradores_matriz', 'compradores_lojas', 'cod_erros_matriz', 'cod_erros_lojas',
