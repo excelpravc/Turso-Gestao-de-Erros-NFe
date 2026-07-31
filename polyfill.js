@@ -60,22 +60,22 @@
     return (String(perfil || '').toLowerCase() === 'matriz') ? 'cod_erros_matriz' : 'cod_erros_lojas';
   }
 
-  // ── CRUD genérico (coleções payload JSON) — via /api/tenant/data ──
+  // ── CRUD genérico (coleções payload JSON) — via /api/data ──
   async function _loadColl(collName) {
-    const r = await _api('GET', '/api/tenant/data', { query: { colecao: collName } });
+    const r = await _api('GET', '/api/data', { query: { colecao: collName } });
     return r.rows;
   }
   async function _add(collName, data) {
-    const r = await _api('POST', '/api/tenant/data', { query: { colecao: collName }, body: data });
+    const r = await _api('POST', '/api/data', { query: { colecao: collName }, body: data });
     return { ok: true, id: r.id };
   }
   async function _update(collName, data) {
     if (!data || data.id == null) return { ok: false };
-    await _api('PUT', '/api/tenant/data', { query: { colecao: collName }, body: data });
+    await _api('PUT', '/api/data', { query: { colecao: collName }, body: data });
     return { ok: true };
   }
   async function _delete(collName, id) {
-    await _api('DELETE', '/api/tenant/data', { query: { colecao: collName, id } });
+    await _api('DELETE', '/api/data', { query: { colecao: collName, id } });
     return { ok: true };
   }
 
@@ -105,7 +105,7 @@
   async function _puxarDelta(perfil) {
     const perfilKey = _perfilKey(perfil);
     const sinceId = _histMaxId.get(perfilKey) || 0;
-    const r = await _api('GET', '/api/tenant/historico', { query: { perfil, modo: 'delta', sinceId } });
+    const r = await _api('GET', '/api/historico', { query: { perfil, modo: 'delta', sinceId } });
     if (!r.rows.length) return;
     const rows = _histFull.get(perfilKey);
     r.rows.forEach(data => {
@@ -124,7 +124,7 @@
 
     const ready = (async () => {
       // 1ª leitura: carrega tudo (equivalente à primeira entrega do onSnapshot)
-      const r = await _api('GET', '/api/tenant/historico', { query: { perfil, modo: 'delta', sinceId: 0 } });
+      const r = await _api('GET', '/api/historico', { query: { perfil, modo: 'delta', sinceId: 0 } });
       _histFull.set(perfilKey, r.rows);
       const maxId = r.rows.reduce((m, x) => Math.max(m, Number(x.id) || 0), 0);
       _histMaxId.set(perfilKey, maxId);
@@ -154,15 +154,15 @@
   async function addHistorico(data) {
     const payload = Object.assign({}, data);
     if (!payload.data) payload.data = _hojeBR();
-    const r = await _api('POST', '/api/tenant/historico', { body: payload });
+    const r = await _api('POST', '/api/historico', { body: payload });
     return { ok: true, id: r.id };
   }
   async function updateHistorico(data) {
-    await _api('PUT', '/api/tenant/historico', { body: data });
+    await _api('PUT', '/api/historico', { body: data });
     return { ok: true };
   }
   async function deleteHistorico(id, perfil) {
-    await _api('DELETE', '/api/tenant/historico', { query: { id, perfil } });
+    await _api('DELETE', '/api/historico', { query: { id, perfil } });
     return { ok: true };
   }
 
@@ -177,7 +177,7 @@
 
   // ── Busca direta por DANF: só traz os documentos que batem (leitura barata) ──
   async function buscarDanfNoHistorico(danf, perfil) {
-    const r = await _api('GET', '/api/tenant/historico', { query: { perfil, modo: 'danf', danf } });
+    const r = await _api('GET', '/api/historico', { query: { perfil, modo: 'danf', danf } });
     return r.rows;
   }
 
@@ -185,12 +185,12 @@
   async function loadHistUltimos(perfil, limite, cursorId) {
     const query = { perfil, modo: 'ultimos', limite: limite || 100 };
     if (cursorId) query.cursorId = cursorId;
-    const r = await _api('GET', '/api/tenant/historico', { query });
+    const r = await _api('GET', '/api/historico', { query });
     return r.rows;
   }
 
   async function updateHistoricoSituacaoPorDANF(danf, loja, perfil) {
-    const r = await _api('PUT', '/api/tenant/historico', {
+    const r = await _api('PUT', '/api/historico', {
       query: { modo: 'situacao-por-danf' },
       body: { danf, loja, perfil }
     });
@@ -199,31 +199,31 @@
 
   // ── Assinatura / config por perfil ──
   async function loadAssinatura(perfil) {
-    const r = await _api('GET', '/api/tenant/config', { query: { chave: String(perfil) } });
+    const r = await _api('GET', '/api/config', { query: { chave: String(perfil) } });
     return r.valor;
   }
   async function saveAssinatura(data, perfil) {
-    await _api('PUT', '/api/tenant/config', { body: { chave: String(perfil), valor: data, merge: true } });
+    await _api('PUT', '/api/config', { body: { chave: String(perfil), valor: data, merge: true } });
     return { ok: true };
   }
 
   // ── Senha única do sistema ──
   async function loadSenhaSistema() {
-    const r = await _api('GET', '/api/tenant/config', { query: { chave: 'sistema' } });
+    const r = await _api('GET', '/api/config', { query: { chave: 'sistema' } });
     return r.valor ? (r.valor.senha || null) : null;
   }
   async function saveSenhaSistema(atual, nova) {
-    const r = await _api('PUT', '/api/tenant/senha-sistema', { body: { atual, nova } });
+    const r = await _api('PUT', '/api/senha-sistema', { body: { atual, nova } });
     return r.ok ? { ok: true } : { ok: false, msg: r.msg };
   }
 
   // ── E-mail de recuperação da senha do sistema ──
   async function loadEmailRecuperacao() {
-    const r = await _api('GET', '/api/tenant/config', { query: { chave: 'sistema' } });
+    const r = await _api('GET', '/api/config', { query: { chave: 'sistema' } });
     return r.valor ? (r.valor.emailRecuperacao || null) : null;
   }
   async function saveEmailRecuperacao(email) {
-    await _api('PUT', '/api/tenant/config', { body: { chave: 'sistema', valor: { emailRecuperacao: String(email || '').trim() }, merge: true } });
+    await _api('PUT', '/api/config', { body: { chave: 'sistema', valor: { emailRecuperacao: String(email || '').trim() }, merge: true } });
     return { ok: true };
   }
 
@@ -255,13 +255,13 @@
 
   // ── Importação em massa ──
   async function importarEmMassa(collName, rows) {
-    const r = await _api('POST', '/api/tenant/importar-em-massa', { query: { colecao: collName }, body: { rows } });
+    const r = await _api('POST', '/api/importar-em-massa', { query: { colecao: collName }, body: { rows } });
     return { ok: true, importados: r.importados, idInicial: r.idInicial };
   }
 
   // ── Limpeza em lote de uma coleção inteira ──
   async function limparColecao(collName) {
-    const r = await _api('DELETE', '/api/tenant/importar-em-massa', { query: { colecao: collName } });
+    const r = await _api('DELETE', '/api/importar-em-massa', { query: { colecao: collName } });
     return { ok: true, removidos: r.removidos };
   }
 
