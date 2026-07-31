@@ -13,7 +13,7 @@
 //    Daí em diante todo o sistema (histórico, cadastros etc.) lê e
 //    grava via polyfill.js, que já manda o tenantId em toda chamada.
 //  - Ao logar como usuário com isAdmin:true, abre o Painel Admin em
-//    vez do sistema normal — CRUD via /api/admin/usuarios.
+//    vez do sistema normal — CRUD via /api/usuarios.
 //
 //  IMPORTANTE — bootstrap do primeiro usuário ADM:
 //  Antes isso era feito direto no Console do Firebase. Agora:
@@ -62,7 +62,7 @@ async function fazerLogin() {
 
   btn.disabled = true; btn.textContent = 'Entrando…';
   try {
-    const resp = await fetch('/api/auth/login', {
+    const resp = await fetch('/api/login', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ usuario, senha, modo })
@@ -126,7 +126,7 @@ async function _renderListaUsuarios() {
   const box = document.getElementById('admin-usuarios-lista');
   box.textContent = 'Carregando…';
   try {
-    const resp = await fetch('/api/admin/usuarios');
+    const resp = await fetch('/api/usuarios');
     const r = await resp.json();
     if (!r.ok) throw new Error(r.error);
     const usuarios = r.usuarios;
@@ -205,7 +205,7 @@ async function abrirFormUsuario(id) {
 
   if (id) {
     try {
-      const resp = await fetch('/api/admin/usuarios?id=' + encodeURIComponent(id));
+      const resp = await fetch('/api/usuarios?id=' + encodeURIComponent(id));
       const r = await resp.json();
       if (r.ok && r.usuario) {
         const d = r.usuario;
@@ -251,7 +251,7 @@ async function abrirFormUsuario(id) {
 // servidor quem resolve tursoUrl/tursoToken e consulta — o browser nunca
 // vê o token do banco do cliente.
 async function _lerSenhaSistemaDoTenant(tenantId) {
-  const resp = await fetch('/api/tenant/config?tenantId=' + encodeURIComponent(tenantId) + '&chave=sistema');
+  const resp = await fetch('/api/config?tenantId=' + encodeURIComponent(tenantId) + '&chave=sistema');
   const r = await resp.json();
   if (!r.ok) throw new Error(r.error || 'falha ao ler config do tenant');
   return (r.valor && r.valor.senha) || '@mudar';
@@ -286,7 +286,7 @@ async function salvarUsuario() {
 
     if (id) {
       dados.id = id;
-      const resp = await fetch('/api/admin/usuarios', {
+      const resp = await fetch('/api/usuarios', {
         method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(dados)
       });
       const r = await resp.json();
@@ -295,7 +295,7 @@ async function salvarUsuario() {
     } else {
       dados.isAdmin = false;
       dados.senhaSistemaAtual = '';
-      const resp = await fetch('/api/admin/usuarios', {
+      const resp = await fetch('/api/usuarios', {
         method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(dados)
       });
       const r = await resp.json();
@@ -313,7 +313,7 @@ async function salvarUsuario() {
 // Grava a nova senha do sistema direto no banco Turso do cliente, via API
 // (equivalente a abrir uma conexão Firebase temporária e fechar em seguida).
 async function _escreverSenhaSistemaNoTenant(tenantId, novaSenha) {
-  const resp = await fetch('/api/tenant/config?tenantId=' + encodeURIComponent(tenantId), {
+  const resp = await fetch('/api/config?tenantId=' + encodeURIComponent(tenantId), {
     method: 'PUT',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ chave: 'sistema', valor: { senha: novaSenha }, merge: true })
@@ -356,7 +356,7 @@ async function excluirUsuario(id, nomeExibicao) {
   });
   if (!ok) return;
   try {
-    const resp = await fetch('/api/admin/usuarios?id=' + encodeURIComponent(id), { method: 'DELETE' });
+    const resp = await fetch('/api/usuarios?id=' + encodeURIComponent(id), { method: 'DELETE' });
     const r = await resp.json();
     if (!r.ok) throw new Error(r.error || 'falha ao excluir');
     toast('✓ Usuário excluído.');
@@ -381,7 +381,7 @@ async function alterarSenhaVisualizacao() {
   const btn = document.querySelector('button[onclick="alterarSenhaVisualizacao()"]');
   if (btn) { btn.textContent = '⏳ Salvando…'; btn.disabled = true; }
   try {
-    const resp = await fetch('/api/auth/trocar-senha', {
+    const resp = await fetch('/api/trocar-senha', {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ id: window.CURRENT_USUARIO_ID, atual, nova })
