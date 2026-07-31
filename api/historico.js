@@ -9,7 +9,7 @@
 // PUT  /api/tenant/historico?tenantId=X                body: {id, perfil, ...campos}
 // PUT  /api/tenant/historico?tenantId=X&modo=situacao-por-danf  body: {danf, loja, perfil}
 // DELETE /api/tenant/historico?tenantId=X&id=123&perfil=matriz
-const { getTenantClient } = require('../../lib/tursoClient');
+const { getTenantClient } = require('./_tursoClient');
 
 function tabela(perfil) {
   return (String(perfil || '').toLowerCase() === 'matriz') ? 'historico_matriz' : 'historico_lojas';
