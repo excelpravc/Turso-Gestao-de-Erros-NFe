@@ -1,0 +1,406 @@
+// ════════════════════════════════════════════════════════════════
+//  MULTI-TENANT — Login (usuário/senha) + Painel ADM de usuários
+//
+//  Como funciona AGORA (pós-migração pra Turso):
+//  - Não existe mais window.dbCentral como conexão de banco — o
+//    diretório de clientes mora no banco Turso "admin", acessado só
+//    pelo SERVIDOR (api/admin/usuarios.js, api/auth/login.js). O
+//    browser nunca vê a URL/token de banco de ninguém.
+//  - Ao logar como cliente normal, o servidor confere a senha e
+//    devolve o `id` do tenant. Chamamos _initTenantFirebase(id)
+//    (nome mantido por compatibilidade — está em turso-init.js) só
+//    pra guardar esse id em window.dbTenant/window.CURRENT_TENANT_ID.
+//    Daí em diante todo o sistema (histórico, cadastros etc.) lê e
+//    grava via polyfill.js, que já manda o tenantId em toda chamada.
+//  - Ao logar como usuário com isAdmin:true, abre o Painel Admin em
+//    vez do sistema normal — CRUD via /api/admin/usuarios.
+//
+//  IMPORTANTE — bootstrap do primeiro usuário ADM:
+//  Antes isso era feito direto no Console do Firebase. Agora:
+//    turso db shell errosnfe-admin
+//    INSERT INTO usuarios (id, usuario, senha, isAdmin, ativo)
+//    VALUES ('admin1', 'admin', 'escolha-uma-senha-forte', 1, 1);
+//  Depois disso, logins seguintes (novos clientes) podem ser
+//  cadastrados direto pelo Painel Admin, sem precisar mexer no
+//  banco de novo.
+//
+//  Precisa carregar DEPOIS de: turso-init.js, polyfill.js, scripts.js
+// ════════════════════════════════════════════════════════════════
+
+let _usuarioLogadoDoc = null;
+window._LOGIN_MODO_ESCOLHIDO = 'view'; // padrão inicial da tela de login
+
+function _selecionarModoLogin(modo) {
+  window._LOGIN_MODO_ESCOLHIDO = modo;
+  const btnView = document.getElementById('login-modo-view');
+  const btnEdit = document.getElementById('login-modo-edit');
+  const ativo = 'background:var(--accent);border:1px solid var(--accent);color:#000';
+  const inativo = 'background:transparent;border:1px solid var(--accent);color:var(--accent)';
+  const base = 'flex:1;padding:10px;';
+  if (modo === 'view') {
+    btnView.style.cssText = base + ativo;
+    btnEdit.style.cssText = base + inativo;
+  } else {
+    btnView.style.cssText = base + inativo;
+    btnEdit.style.cssText = base + ativo;
+  }
+}
+
+async function fazerLogin() {
+  const usuario = (document.getElementById('login-usuario-inp').value || '').trim().toLowerCase();
+  const senha = document.getElementById('login-senha-inp').value || '';
+  const modo = window._LOGIN_MODO_ESCOLHIDO || 'view';
+  const erroEl = document.getElementById('login-erro');
+  const btn = document.getElementById('login-btn');
+  erroEl.style.display = 'none';
+
+  if (!usuario || !senha) {
+    erroEl.textContent = '✕ Informe usuário e senha';
+    erroEl.style.display = 'block';
+    return;
+  }
+
+  btn.disabled = true; btn.textContent = 'Entrando…';
+  try {
+    const resp = await fetch('/api/auth/login', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ usuario, senha, modo })
+    });
+    const r = await resp.json();
+    if (!r.ok) throw new Error(r.error || 'senha incorreta');
+
+    // ── Login como ADMIN → ignora Visualizar/Editar, abre o painel ──
+    if (r.usuario.isAdmin) {
+      _usuarioLogadoDoc = r.usuario;
+      document.getElementById('tela-login').style.display = 'none';
+      abrirPainelAdmin();
+      return;
+    }
+
+    // ── Login como CLIENTE normal ──
+    window.CURRENT_USUARIO_ID = r.usuario.id;
+    await _initTenantFirebase(r.usuario.id); // nome mantido por compatibilidade — está em turso-init.js
+
+    if (modo === 'edit') {
+      window._MODO_VISUALIZACAO = false;
+      SENHA_EDICAO = r.senhaEdicaoAtual;
+    } else {
+      window._MODO_VISUALIZACAO = true;
+    }
+
+    _usuarioLogadoDoc = r.usuario;
+
+    if (typeof _atualizarBadgeModoPerfil === 'function') _atualizarBadgeModoPerfil();
+    document.getElementById('tela-login').style.display = 'none';
+    const tela = document.getElementById('tela-perfil');
+    if (tela) tela.style.display = 'flex';
+  } catch (e) {
+    console.error('Erro no login:', e);
+    erroEl.textContent = '✕ Usuário ou senha incorretos';
+    erroEl.style.display = 'block';
+  } finally {
+    btn.disabled = false; btn.textContent = 'Entrar';
+  }
+}
+
+function logoutAdmin() {
+  document.getElementById('tela-admin').style.display = 'none';
+  document.getElementById('tela-login').style.display = 'flex';
+  document.getElementById('login-usuario-inp').value = '';
+  document.getElementById('login-senha-inp').value = '';
+  document.getElementById('login-erro').style.display = 'none';
+  _usuarioLogadoDoc = null;
+}
+
+// ════════════════════════════════════════════════════════════════
+//  PAINEL ADM — listar / incluir / editar / excluir usuários
+// ════════════════════════════════════════════════════════════════
+
+async function abrirPainelAdmin() {
+  document.getElementById('tela-admin').style.display = 'flex';
+  await _renderListaUsuarios();
+}
+
+async function _renderListaUsuarios() {
+  const box = document.getElementById('admin-usuarios-lista');
+  box.textContent = 'Carregando…';
+  try {
+    const resp = await fetch('/api/admin/usuarios');
+    const r = await resp.json();
+    if (!r.ok) throw new Error(r.error);
+    const usuarios = r.usuarios;
+
+    const clientes = usuarios.filter(u => !u.isAdmin);
+    const totalEl = document.getElementById('admin-kpi-total');
+    const ativosEl = document.getElementById('admin-kpi-ativos');
+    const inativosEl = document.getElementById('admin-kpi-inativos');
+    if (totalEl) totalEl.textContent = clientes.length;
+    if (ativosEl) ativosEl.textContent = clientes.filter(u => u.ativo).length;
+    if (inativosEl) inativosEl.textContent = clientes.filter(u => !u.ativo).length;
+
+    if (!usuarios.length) {
+      box.innerHTML = '<div class="nd">Nenhum usuário cadastrado ainda. Clique em "➕ Novo Usuário".</div>';
+      return;
+    }
+    box.innerHTML = usuarios.map(u => {
+      const inicial = (u.empresa || u.usuario || '?').trim().charAt(0).toUpperCase();
+      const corAvatar = u.isAdmin ? 'var(--accent)' : (!u.ativo ? 'var(--muted)' : '#4d9fff');
+      const detalhes = u.isAdmin
+        ? `<span style="color:var(--muted)">usuário:</span> ${esc(u.usuario)}`
+        : `<span style="color:var(--muted)">usuário:</span> ${esc(u.usuario)}` +
+          ` &nbsp;·&nbsp; <span style="color:var(--muted)">visualização:</span> <span class="senha-oculta" data-valor="${esc(u.senha || '')}">••••••</span>` +
+          (u.senhaSistemaAtual ? ` &nbsp;·&nbsp; <span style="color:var(--muted)">edição:</span> <span class="senha-oculta" data-valor="${esc(u.senhaSistemaAtual)}">••••••</span>` : '') +
+          (u.tursoUrl ? `<br><span style="color:var(--muted)">banco:</span> ${esc(u.tursoUrl)}` : '');
+      return `
+      <div class="usu-row" style="display:flex;justify-content:space-between;align-items:center;gap:14px;
+      background:var(--card2);border:1px solid var(--border);border-radius:14px;
+      padding:16px 18px;margin-bottom:10px;flex-wrap:wrap;transition:border-color .2s"
+      onmouseover="this.style.borderColor='var(--accent)'" onmouseout="this.style.borderColor='var(--border)'">
+        <div style="display:flex;gap:14px;align-items:center;min-width:0">
+          <div style="width:42px;height:42px;border-radius:50%;background:${corAvatar}22;border:1.5px solid ${corAvatar};
+          color:${corAvatar};display:flex;align-items:center;justify-content:center;font-weight:800;font-size:1.1rem;flex-shrink:0">
+            ${esc(inicial)}
+          </div>
+          <div style="min-width:0">
+            <div style="font-weight:700;display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+              ${esc(u.empresa || u.usuario)}
+              ${u.isAdmin ? '<span style="background:var(--accent);color:#000;font-size:.6rem;font-weight:800;letter-spacing:.5px;padding:2px 8px;border-radius:20px">ADMIN</span>' : ''}
+              ${!u.ativo ? '<span style="background:var(--danger);color:#fff;font-size:.6rem;font-weight:800;letter-spacing:.5px;padding:2px 8px;border-radius:20px">INATIVO</span>' : ''}
+            </div>
+            <div style="font-family:'DM Mono',monospace;font-size:.72rem;color:var(--text);margin-top:4px;line-height:1.6">
+              ${detalhes}
+            </div>
+          </div>
+        </div>
+        <div style="display:flex;gap:8px;flex-shrink:0">
+          ${!u.isAdmin ? `<button class="btn btn-o btn-sm" onclick="_toggleSenhasLinha(this)">👁 Ver senhas</button>` : ''}
+          <button class="btn btn-o btn-sm" onclick="abrirFormUsuario('${u.id}')">✏ Editar</button>
+          ${!u.isAdmin ? `<button class="btn btn-d btn-sm" onclick="excluirUsuario('${u.id}', '${esc(u.empresa || u.usuario)}')">🗑 Excluir</button>` : ''}
+        </div>
+      </div>
+    `;
+    }).join('');
+  } catch (e) {
+    console.error(e);
+    box.innerHTML = '<div class="nd">Erro ao carregar usuários: ' + esc(e.message) + '</div>';
+  }
+}
+
+function _toggleSenhasLinha(btn) {
+  const linha = btn.closest('.usu-row');
+  const spans = linha.querySelectorAll('.senha-oculta');
+  const revelado = btn.textContent.includes('Ocultar');
+  spans.forEach(s => { s.textContent = revelado ? '••••••' : s.dataset.valor; });
+  btn.textContent = revelado ? '👁 Ver senhas' : '🙈 Ocultar senhas';
+}
+
+async function abrirFormUsuario(id) {
+  document.getElementById('usu-doc-id').value = id || '';
+  document.getElementById('modal-usuario-titulo').textContent = id ? '✏️ Editar Usuário' : '➕ Novo Usuário';
+  ['usu-usuario', 'usu-senha', 'usu-empresa', 'usu-tursoUrl', 'usu-tursoToken', 'usu-senha-sistema']
+    .forEach(fid => { document.getElementById(fid).value = ''; });
+  document.getElementById('usu-ativo').checked = true;
+  document.getElementById('usu-senha-sistema-wrap').style.display = id ? 'block' : 'none';
+
+  if (id) {
+    try {
+      const resp = await fetch('/api/admin/usuarios?id=' + encodeURIComponent(id));
+      const r = await resp.json();
+      if (r.ok && r.usuario) {
+        const d = r.usuario;
+        document.getElementById('usu-usuario').value = d.usuario || '';
+        document.getElementById('usu-senha').value = d.senha || '';
+        document.getElementById('usu-empresa').value = d.empresa || '';
+        document.getElementById('usu-ativo').checked = !!d.ativo;
+        document.getElementById('usu-tursoUrl').value = d.tursoUrl || '';
+        document.getElementById('usu-tursoToken').value = d.tursoToken || '';
+
+        // Busca a senha do sistema AO VIVO direto no banco do cliente — não
+        // depende do espelho central, então aparece mesmo que o cliente
+        // nunca tenha trocado a senha (valor padrão de fábrica incluso).
+        // Não se aplica à própria conta do admin (ela não tem banco de cliente).
+        const wrapSenhaSistema = document.getElementById('usu-senha-sistema-wrap');
+        if (d.isAdmin) {
+          wrapSenhaSistema.style.display = 'none';
+        } else {
+          wrapSenhaSistema.style.display = 'block';
+          const senhaInp = document.getElementById('usu-senha-sistema');
+          senhaInp.placeholder = 'Carregando…';
+          if (d.tursoUrl) {
+            try {
+              const senhaAtualReal = await _lerSenhaSistemaDoTenant(id);
+              senhaInp.value = senhaAtualReal;
+              senhaInp.placeholder = 'deixe em branco pra não alterar';
+            } catch (e) {
+              console.error('Erro ao ler senha do sistema do cliente:', e);
+              senhaInp.placeholder = 'Não foi possível ler (verifique se o banco Turso desse cliente está ativo)';
+            }
+          } else {
+            senhaInp.placeholder = 'Este cliente ainda não tem banco Turso configurado';
+          }
+        }
+      }
+    } catch (e) { console.error(e); }
+  }
+  document.getElementById('modal-usuario').classList.add('open');
+}
+
+// Lê a senha do sistema (edição) direto do banco do próprio cliente, via API.
+// Antes abria uma conexão Firebase temporária no browser; agora é o
+// servidor quem resolve tursoUrl/tursoToken e consulta — o browser nunca
+// vê o token do banco do cliente.
+async function _lerSenhaSistemaDoTenant(tenantId) {
+  const resp = await fetch('/api/tenant/config?tenantId=' + encodeURIComponent(tenantId) + '&chave=sistema');
+  const r = await resp.json();
+  if (!r.ok) throw new Error(r.error || 'falha ao ler config do tenant');
+  return (r.valor && r.valor.senha) || '@mudar';
+}
+
+function fecharFormUsuario() {
+  document.getElementById('modal-usuario').classList.remove('open');
+}
+
+async function salvarUsuario() {
+  const id = document.getElementById('usu-doc-id').value;
+  const usuario = document.getElementById('usu-usuario').value.trim().toLowerCase();
+  const senha = document.getElementById('usu-senha').value.trim();
+  const empresa = document.getElementById('usu-empresa').value.trim();
+  const ativo = document.getElementById('usu-ativo').checked;
+  const novaSenhaSistema = document.getElementById('usu-senha-sistema').value.trim();
+  const tursoUrl = document.getElementById('usu-tursoUrl').value.trim();
+  const tursoToken = document.getElementById('usu-tursoToken').value.trim();
+
+  if (!usuario || !senha) { toast('Preencha usuário e senha!', true); return; }
+
+  const dados = { usuario, senha, empresa, ativo, tursoUrl, tursoToken };
+
+  try {
+    // Se o ADM preencheu uma nova senha do sistema (edição), grava ela
+    // DIRETO no banco Turso do próprio cliente — não só no espelho central.
+    if (id && novaSenhaSistema && tursoUrl) {
+      await _escreverSenhaSistemaNoTenant(id, novaSenhaSistema);
+      dados.senhaSistemaAtual = novaSenhaSistema;
+      dados.senhaSistemaAtualizadaEm = new Date().toISOString();
+    }
+
+    if (id) {
+      dados.id = id;
+      const resp = await fetch('/api/admin/usuarios', {
+        method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(dados)
+      });
+      const r = await resp.json();
+      if (!r.ok) throw new Error(r.error || 'falha ao atualizar');
+      toast('✓ Usuário atualizado!');
+    } else {
+      dados.isAdmin = false;
+      dados.senhaSistemaAtual = '';
+      const resp = await fetch('/api/admin/usuarios', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(dados)
+      });
+      const r = await resp.json();
+      if (!r.ok) throw new Error(r.error || 'falha ao criar');
+      toast('✓ Usuário criado!');
+    }
+    fecharFormUsuario();
+    _renderListaUsuarios();
+  } catch (e) {
+    console.error(e);
+    toast('Erro ao salvar usuário: ' + e.message, true);
+  }
+}
+
+// Grava a nova senha do sistema direto no banco Turso do cliente, via API
+// (equivalente a abrir uma conexão Firebase temporária e fechar em seguida).
+async function _escreverSenhaSistemaNoTenant(tenantId, novaSenha) {
+  const resp = await fetch('/api/tenant/config?tenantId=' + encodeURIComponent(tenantId), {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ chave: 'sistema', valor: { senha: novaSenha }, merge: true })
+  });
+  const r = await resp.json();
+  if (!r.ok) throw new Error(r.error || 'falha ao gravar senha no tenant');
+}
+
+// ── Modal de confirmação genérico e estilizado (substitui o confirm() nativo) ──
+function confirmModal({ icon = '⚠️', title = 'Confirmar ação', desc = '', confirmLabel = 'Confirmar' } = {}) {
+  return new Promise((resolve) => {
+    const modal = document.getElementById('modal-confirm-generico');
+    document.getElementById('mcg-icon').textContent = icon;
+    document.getElementById('mcg-title').textContent = title;
+    document.getElementById('mcg-desc').innerHTML = desc;
+    const btnConfirm = document.getElementById('mcg-confirm');
+    const btnCancel = document.getElementById('mcg-cancel');
+    btnConfirm.textContent = confirmLabel;
+
+    function fechar(resultado) {
+      modal.classList.remove('open');
+      btnConfirm.removeEventListener('click', onConfirm);
+      btnCancel.removeEventListener('click', onCancel);
+      resolve(resultado);
+    }
+    function onConfirm() { fechar(true); }
+    function onCancel() { fechar(false); }
+    btnConfirm.addEventListener('click', onConfirm);
+    btnCancel.addEventListener('click', onCancel);
+    modal.classList.add('open');
+  });
+}
+
+async function excluirUsuario(id, nomeExibicao) {
+  const ok = await confirmModal({
+    icon: '🗑️',
+    title: 'Excluir usuário',
+    desc: `Deseja realmente excluir <strong style="color:var(--text)">${esc(nomeExibicao || '')}</strong>?<br><br>Isso remove só o ACESSO dele ao login. NÃO apaga o banco Turso/dados dele — se quiser apagar os dados de verdade, isso precisa ser feito manualmente no dashboard do Turso.`,
+    confirmLabel: '🗑 Excluir'
+  });
+  if (!ok) return;
+  try {
+    const resp = await fetch('/api/admin/usuarios?id=' + encodeURIComponent(id), { method: 'DELETE' });
+    const r = await resp.json();
+    if (!r.ok) throw new Error(r.error || 'falha ao excluir');
+    toast('✓ Usuário excluído.');
+    _renderListaUsuarios();
+  } catch (e) {
+    console.error(e);
+    toast('Erro ao excluir: ' + e.message, true);
+  }
+}
+
+// ── Cliente troca a própria Senha de Visualização (gravada no diretório central) ──
+async function alterarSenhaVisualizacao() {
+  const atual = (document.getElementById('senha-view-atual')?.value || '').trim();
+  const nova = (document.getElementById('senha-view-nova')?.value || '').trim();
+  const confirma = (document.getElementById('senha-view-confirma')?.value || '').trim();
+  if (!atual) { toast('Informe a senha atual!', true); return; }
+  if (!nova) { toast('Informe a nova senha!', true); return; }
+  if (nova.length < 4) { toast('A nova senha deve ter pelo menos 4 caracteres!', true); return; }
+  if (nova !== confirma) { toast('A confirmação não coincide com a nova senha!', true); return; }
+  if (!window.CURRENT_USUARIO_ID) { toast('Não foi possível identificar o usuário logado.', true); return; }
+
+  const btn = document.querySelector('button[onclick="alterarSenhaVisualizacao()"]');
+  if (btn) { btn.textContent = '⏳ Salvando…'; btn.disabled = true; }
+  try {
+    const resp = await fetch('/api/auth/trocar-senha', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ id: window.CURRENT_USUARIO_ID, atual, nova })
+    });
+    const r = await resp.json();
+    if (!r.ok) {
+      toast(r.msg || 'Senha atual incorreta!', true);
+      return;
+    }
+    ['senha-view-atual', 'senha-view-nova', 'senha-view-confirma'].forEach(id => {
+      const el = document.getElementById(id); if (el) el.value = '';
+    });
+    toast('✓ Senha de visualização alterada com sucesso!');
+    const ind = document.getElementById('senha-view-saved-ind');
+    if (ind) { ind.textContent = '✓ Nova senha salva'; ind.classList.add('show'); setTimeout(() => ind.classList.remove('show'), 3000); }
+  } catch (e) {
+    console.error(e);
+    toast('Falha: ' + e.message, true);
+  } finally {
+    if (btn) { btn.textContent = '💾 Alterar Senha de Visualização'; btn.disabled = false; }
+  }
+}
