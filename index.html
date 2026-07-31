@@ -132,16 +132,12 @@ Gestão de <em style="color:var(--accent);font-style:normal">Clientes</em>
 Essa é a senha que o cliente usa para liberar Edição (Lojas/Matriz) dentro do sistema dele. É carregada automaticamente do banco dele — altere aqui pra trocar direto.
 </p>
 </div>
-<div class="sec-title" style="margin-top:18px">Configuração do Firebase do cliente</div>
+<div class="sec-title" style="margin-top:18px">Configuração do banco Turso do cliente</div>
 <p style="font-size:.72rem;color:var(--muted);margin-bottom:12px;font-family:'DM Mono',monospace;line-height:1.6">
-Cole aqui os dados do projeto Firebase criado pra esse cliente (Configurações do projeto → Seus apps → SDK Config).
+Cole aqui a URL e o Token do banco Turso criado pra esse cliente (dashboard do Turso → banco do cliente → Connect).
 </p>
-<div class="field"><label>apiKey</label><input type="text" id="usu-apiKey"></div>
-<div class="field"><label>authDomain</label><input type="text" id="usu-authDomain"></div>
-<div class="field"><label>projectId</label><input type="text" id="usu-projectId"></div>
-<div class="field"><label>storageBucket</label><input type="text" id="usu-storageBucket"></div>
-<div class="field"><label>messagingSenderId</label><input type="text" id="usu-messagingSenderId"></div>
-<div class="field"><label>appId</label><input type="text" id="usu-appId"></div>
+<div class="field"><label>Turso Database URL</label><input type="text" id="usu-tursoUrl" placeholder="libsql://nome-do-banco-org.turso.io"></div>
+<div class="field"><label>Turso Auth Token</label><input type="text" id="usu-tursoToken" placeholder="eyJhbGci..."></div>
 <div class="modal-btns">
 <button class="btn btn-p" onclick="salvarUsuario()">💾 Salvar</button>
 <button class="btn btn-o" onclick="fecharFormUsuario()">Cancelar</button>
