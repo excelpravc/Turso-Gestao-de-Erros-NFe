@@ -1,7 +1,7 @@
 // Substitui o trecho do MultiTenant.js (alterarSenhaVisualizacao) que fazia:
 //   window.dbCentral.collection('usuarios').doc(CURRENT_USUARIO_ID).get() → conferir senha atual → .update({senha})
 // PUT /api/auth/trocar-senha   body: { id, atual, nova }
-const { getAdminClient } = require('../../lib/tursoClient');
+const { getAdminClient } = require('./_tursoClient');
 
 module.exports = async function handler(req, res) {
   if (req.method !== 'PUT') return res.status(405).json({ ok: false, error: 'Method not allowed' });
