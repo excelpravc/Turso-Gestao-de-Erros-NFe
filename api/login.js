@@ -3,7 +3,7 @@
 //   modo = 'edit' → confere contra a Senha do Sistema gravada no banco do PRÓPRIO tenant
 //                    (equivalente a _lerSenhaEdicaoTenantAtual + comparação no MultiTenant.js original).
 // Substitui: window.dbCentral.collection('usuarios').where('usuario','==',usuario).limit(1).get()
-const { getAdminClient, getTenantClient } = require('../../lib/tursoClient');
+const { getAdminClient, getTenantClient } = require('./_tursoClient');
 
 module.exports = async function handler(req, res) {
   if (req.method !== 'POST') return res.status(405).json({ ok: false, error: 'Method not allowed' });
