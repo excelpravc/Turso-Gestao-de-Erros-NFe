@@ -9,7 +9,7 @@
 // arquivo) — no Firestore original a proteção vinha das regras de
 // segurança do projeto; aqui precisa ser feita explicitamente aqui
 // ou num middleware comum, senão qualquer um pode listar clientes.
-const { getAdminClient } = require('../../lib/tursoClient');
+const { getAdminClient } = require('./_tursoClient');
 
 module.exports = async function handler(req, res) {
   try {
