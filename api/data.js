@@ -2,7 +2,7 @@
 // POST   /api/tenant/data?tenantId=X&colecao=lojas   body: {...}  → insere (equivalente a _add)
 // PUT    /api/tenant/data?tenantId=X&colecao=lojas   body: {id,...} → atualiza (equivalente a _update)
 // DELETE /api/tenant/data?tenantId=X&colecao=lojas&id=123          → apaga (equivalente a _delete)
-const { getTenantClient } = require('../../lib/tursoClient');
+const { getTenantClient } = require('./_tursoClient');
 
 // Só tabelas "genéricas" (payload JSON) passam por aqui.
 // Histórico tem rota própria (colunas indexadas), config também.
