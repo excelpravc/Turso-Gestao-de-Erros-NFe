@@ -3,7 +3,7 @@
 //
 // GET /api/tenant/config?tenantId=X&chave=sistema
 // PUT /api/tenant/config?tenantId=X   body: { chave, valor: {...}, merge: true }
-const { getTenantClient, getAdminClient } = require('../../lib/tursoClient');
+const { getTenantClient, getAdminClient } = require('./_tursoClient');
 
 module.exports = async function handler(req, res) {
   const q = req.query;
