@@ -163,6 +163,15 @@
   }
   async function deleteHistorico(id, perfil) {
     await _api('DELETE', '/api/historico', { query: { id, perfil } });
+    // Remove também do cache local (_histFull) — senão o registro
+    // "renasce" na tela na próxima vez que o Histórico for recarregado,
+    // porque o polling de delta só sabe ADICIONAR/ATUALIZAR, nunca remover.
+    const perfilKey = _perfilKey(perfil);
+    const rows = _histFull.get(perfilKey);
+    if (rows) {
+      const idx = rows.findIndex(x => String(x.id) === String(id));
+      if (idx >= 0) rows.splice(idx, 1);
+    }
     return { ok: true };
   }
 
