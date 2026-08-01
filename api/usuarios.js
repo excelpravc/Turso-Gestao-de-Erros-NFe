@@ -9,7 +9,7 @@
 // arquivo) — no Firestore original a proteção vinha das regras de
 // segurança do projeto; aqui precisa ser feita explicitamente aqui
 // ou num middleware comum, senão qualquer um pode listar clientes.
-const { getAdminClient } = require('./_tursoClient');
+const { getAdminClient, criarSchemaTenant } = require('./_tursoClient');
 
 module.exports = async function handler(req, res) {
   try {
@@ -33,6 +33,22 @@ module.exports = async function handler(req, res) {
         args: [id, d.usuario, d.senha, d.empresa || null, d.ativo === false ? 0 : 1, d.isAdmin ? 1 : 0,
                d.tursoUrl || null, d.tursoToken || null]
       });
+
+      // Se a URL/Token do Turso desse cliente já foram preenchidos,
+      // cria automaticamente todas as tabelas no banco dele — igual
+      // o Firebase fazia sozinho ao gravar o primeiro documento.
+      if (d.tursoUrl && d.tursoToken) {
+        try {
+          await criarSchemaTenant(d.tursoUrl, d.tursoToken);
+        } catch (schemaErr) {
+          console.error('[admin/usuarios] erro ao criar schema do tenant:', schemaErr);
+          return res.status(200).json({
+            ok: true, id,
+            aviso: 'Usuário criado, mas houve falha ao criar as tabelas no banco Turso: ' + schemaErr.message
+          });
+        }
+      }
+
       return res.status(200).json({ ok: true, id });
     }
 
@@ -48,6 +64,22 @@ module.exports = async function handler(req, res) {
         args: [merged.usuario, merged.senha, merged.empresa || null, merged.ativo ? 1 : 0, merged.isAdmin ? 1 : 0,
                merged.tursoUrl || null, merged.tursoToken || null, d.id]
       });
+
+      // Mesma lógica do POST: garante que as tabelas existem sempre
+      // que a URL/Token do Turso estiverem preenchidos (seguro rodar
+      // de novo, usa IF NOT EXISTS — não apaga dados já existentes).
+      if (merged.tursoUrl && merged.tursoToken) {
+        try {
+          await criarSchemaTenant(merged.tursoUrl, merged.tursoToken);
+        } catch (schemaErr) {
+          console.error('[admin/usuarios] erro ao criar schema do tenant:', schemaErr);
+          return res.status(200).json({
+            ok: true,
+            aviso: 'Usuário atualizado, mas houve falha ao criar/verificar as tabelas no banco Turso: ' + schemaErr.message
+          });
+        }
+      }
+
       return res.status(200).json({ ok: true });
     }
 
