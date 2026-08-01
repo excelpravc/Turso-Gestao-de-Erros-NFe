@@ -451,13 +451,13 @@ function _colecaoFirestore(tipo) {
     comercial: 'comerciais', loja: 'lojas', manifesto: 'manifestos', justificativa: 'justificativas'
   };
   if (tipo === 'historico') {
-    return (_perfilAtivo().toLowerCase() === 'matriz') ? 'Historico_Matriz' : 'Historico_Lojas';
+    return (_perfilAtivo().toLowerCase() === 'matriz') ? 'historico_matriz' : 'historico_lojas';
   }
   if (tipo === 'comprador') {
-    return (_perfilAtivo().toLowerCase() === 'matriz') ? 'Compradores_Matriz' : 'Compradores_Lojas';
+    return (_perfilAtivo().toLowerCase() === 'matriz') ? 'compradores_matriz' : 'compradores_lojas';
   }
   if (tipo === 'codErro') {
-    return (_perfilAtivo().toLowerCase() === 'matriz') ? 'Cod_Erros_Matriz' : 'Cod_Erros_Lojas';
+    return (_perfilAtivo().toLowerCase() === 'matriz') ? 'cod_erros_matriz' : 'cod_erros_lojas';
   }
   return map[tipo];
 }
