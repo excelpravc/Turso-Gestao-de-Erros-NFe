@@ -100,7 +100,14 @@ async function criarSchemaTenant(tursoUrl, tursoToken) {
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       data TEXT, danf TEXT, loja TEXT, fornecedor TEXT,
       erroDesc TEXT, comprador TEXT, status TEXT, situacao TEXT, payload TEXT
-    )`
+    )`,
+    // Índices na coluna danf — sem isso, toda vez que uma NF é marcada
+    // como "Lançada" (UPDATE ... WHERE danf = ?) o SQLite escaneia a
+    // tabela INTEIRA pra achar a linha, o que consome cota de "rows
+    // read" do Turso proporcional ao tamanho da tabela a cada clique.
+    // Com o índice, vai direto na linha certa.
+    `CREATE INDEX IF NOT EXISTS idx_historico_matriz_danf ON historico_matriz(danf)`,
+    `CREATE INDEX IF NOT EXISTS idx_historico_lojas_danf ON historico_lojas(danf)`
   ];
 
   for (const sql of statements) {
