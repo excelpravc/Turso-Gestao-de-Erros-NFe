@@ -291,7 +291,7 @@ async function salvarUsuario() {
       });
       const r = await resp.json();
       if (!r.ok) throw new Error(r.error || 'falha ao atualizar');
-      toast('✓ Usuário atualizado!');
+      toast(r.aviso ? ('⚠ ' + r.aviso) : '✓ Usuário atualizado!', !!r.aviso);
     } else {
       dados.isAdmin = false;
       dados.senhaSistemaAtual = '';
@@ -300,7 +300,7 @@ async function salvarUsuario() {
       });
       const r = await resp.json();
       if (!r.ok) throw new Error(r.error || 'falha ao criar');
-      toast('✓ Usuário criado!');
+      toast(r.aviso ? ('⚠ ' + r.aviso) : '✓ Usuário criado! Tabelas do banco Turso criadas automaticamente.', !!r.aviso);
     }
     fecharFormUsuario();
     _renderListaUsuarios();
