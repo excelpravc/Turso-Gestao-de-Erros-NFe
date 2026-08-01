@@ -380,6 +380,7 @@ const telaPerfil = document.getElementById('tela-perfil');
 const telaLogin = document.getElementById('tela-login');
 if (telaPerfil) telaPerfil.style.display = 'none';
 if (telaLogin) telaLogin.style.display = 'flex';
+document.getElementById('login-usuario-inp').value = '';
 document.getElementById('login-senha-inp').value = '';
 document.getElementById('login-erro').style.display = 'none';
 setTimeout(() => document.getElementById('login-senha-inp').focus(), 80);
@@ -502,6 +503,19 @@ const load = document.getElementById('loading');
 if (load) load.style.display = 'none';
 // _PERFIL começa vazio — será definido em selecionarPerfil()
 window._PERFIL = null;
+
+// Garante que a tela de login sempre abra com os campos vazios,
+// mesmo se o navegador tentar autopreencher usuário/senha salvos.
+function _limparCamposLogin() {
+const u = document.getElementById('login-usuario-inp');
+const s = document.getElementById('login-senha-inp');
+if (u) u.value = '';
+if (s) s.value = '';
+}
+_limparCamposLogin();
+// Roda de novo logo depois — alguns navegadores autopreenchem só
+// depois do primeiro paint, então isso "desfaz" o autofill tardio.
+setTimeout(_limparCamposLogin, 150);
 });
 </script>
 <div id="loading"><div class="spinner"></div><div class="ltxt">Carregando Sistema…</div></div>
