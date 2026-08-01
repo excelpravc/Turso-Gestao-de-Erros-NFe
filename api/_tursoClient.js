@@ -56,4 +56,56 @@ function getTemporaryTenantClient(tursoUrl, tursoToken) {
   return createClient({ url: tursoUrl, authToken: tursoToken });
 }
 
-module.exports = { getAdminClient, getTenantClient, getTemporaryTenantClient };
+// ════════════════════════════════════════════════════════════════
+//  Cria automaticamente TODAS as tabelas necessárias no banco Turso
+//  de um cliente novo — equivalente ao que o Firebase fazia sozinho
+//  ao gravar o primeiro documento numa coleção nova. Como SQLite
+//  não cria tabela "na marra" ao inserir, isso roda 1x (ou toda vez
+//  que salvarmos o usuário) logo depois que a URL/Token do Turso
+//  desse cliente forem informados no Painel Admin.
+//  Usa "IF NOT EXISTS" em tudo, então é seguro rodar mais de uma vez
+//  (ex.: se o ADM editar o usuário e resalvar) sem apagar dados.
+// ════════════════════════════════════════════════════════════════
+const TABELAS_PAYLOAD_SIMPLES = [
+  'compradores_matriz', 'compradores_lojas',
+  'cod_erros_matriz', 'cod_erros_lojas',
+  'comerciais', 'lojas', 'manifestos', 'fornecedores',
+  'justificativas', 'gruposLoja'
+];
+
+async function criarSchemaTenant(tursoUrl, tursoToken) {
+  const db = getTemporaryTenantClient(tursoUrl, tursoToken);
+
+  const statements = [
+    `CREATE TABLE IF NOT EXISTS config (
+      chave TEXT PRIMARY KEY,
+      valor TEXT
+    )`,
+    `CREATE TABLE IF NOT EXISTS regras (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      codErro TEXT,
+      descErro TEXT,
+      destinatarios TEXT,
+      criadoEm TEXT
+    )`,
+    ...TABELAS_PAYLOAD_SIMPLES.map(t =>
+      `CREATE TABLE IF NOT EXISTS ${t} (id INTEGER PRIMARY KEY AUTOINCREMENT, payload TEXT)`
+    ),
+    `CREATE TABLE IF NOT EXISTS historico_matriz (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      data TEXT, danf TEXT, loja TEXT, fornecedor TEXT,
+      erroDesc TEXT, comprador TEXT, status TEXT, situacao TEXT, payload TEXT
+    )`,
+    `CREATE TABLE IF NOT EXISTS historico_lojas (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      data TEXT, danf TEXT, loja TEXT, fornecedor TEXT,
+      erroDesc TEXT, comprador TEXT, status TEXT, situacao TEXT, payload TEXT
+    )`
+  ];
+
+  for (const sql of statements) {
+    await db.execute(sql);
+  }
+}
+
+module.exports = { getAdminClient, getTenantClient, getTemporaryTenantClient, criarSchemaTenant };
