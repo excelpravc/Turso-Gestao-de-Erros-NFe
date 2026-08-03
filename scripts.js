@@ -2760,7 +2760,13 @@ renderTblHist();
 _atualizarContadorHist(DB.historico.length);
 return;
 }
-const filtrado = DB.historico.filter(r => {
+// IMPORTANTE: quando há filtro de texto (NF, fornecedor, etc.), a busca
+// precisa varrer TODOS os registros já baixados do período selecionado
+// (_histCompleto), e não só os 100 primeiros que estão sendo exibidos
+// na paginação (DB.historico) — senão um registro que existe no período
+// mas não está entre os primeiros 100 "some" da busca por engano.
+const baseFiltro = (_histCompleto && _histCompleto.length) ? _histCompleto : DB.historico;
+const filtrado = baseFiltro.filter(r => {
 if (fNf     && !(r.danf       || '').toLowerCase().includes(fNf))     return false;
 if (fForn   && !(r.fornecedor || '').toLowerCase().includes(fForn))   return false;
 if (fLoja) {
@@ -2800,7 +2806,7 @@ if (fVenc === 'ok'       && diff <= 7)              return false;
 return true;
 });
 renderTblHist(filtrado);
-_atualizarContadorHist(filtrado.length, DB.historico.length);
+_atualizarContadorHist(filtrado.length, baseFiltro.length);
 }
 function _atualizarContadorHist(total, totalBase) {
 const lbl = document.getElementById('hist-count-lbl');
