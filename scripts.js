@@ -2509,7 +2509,9 @@ if(salvos > 0) {
 toast(`✓ ${salvos} registro(s) salvo(s) no histórico!`);
 const ind=document.getElementById('saved-ind');
 if(ind){ind.textContent=`✓ ${salvos} ocorrência(s) registrada(s) com sucesso!`;ind.classList.add('show');setTimeout(()=>ind.classList.remove('show'),3000);}
-renderTblHist();gerarDash();resetReg();window.scrollTo({top:0,behavior:'smooth'});
+renderTblHist();
+if (document.getElementById('p-dash')?.classList.contains('on')) { gerarDash(); }
+resetReg();window.scrollTo({top:0,behavior:'smooth'});
 }
 if(errosCount > 0) { toast(`Falha ao salvar ${errosCount} registro(s).`, true); }
 } finally {
