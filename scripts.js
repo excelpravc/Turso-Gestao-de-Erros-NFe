@@ -2299,12 +2299,18 @@ google.script.run
 .withSuccessHandler(r => {
 if (r.ok) {
 toast(`✓ Copiado! NF ${danf} — ${r.totalMarcadas||1} ocorrência(s) marcada(s) como LANÇADA!`);
-DB.historico.forEach(row => {
-if (String(row.danf).trim() === String(danf).trim() &&
-(row.loja||'').trim().toLowerCase() === loja.trim().toLowerCase()) {
-row.situacao = 'Lançada';
-}
-});
+// Atualiza o status em AMBOS os caches locais — não só DB.historico
+// (que é só os 100 primeiros exibidos), mas também _histCompleto
+// (usado por filtrarHist() sempre que há algum filtro ativo). Sem isso,
+// a tela ficava mostrando "Pendente" mesmo após a confirmação, porque
+// filtrarHist() lê de _histCompleto quando há filtro, e esse array
+// nunca era tocado — só sincronizava depois, na próxima busca.
+const _marcarLancada = row =>
+(String(row.danf).trim() === String(danf).trim() &&
+ (row.loja||'').trim().toLowerCase() === loja.trim().toLowerCase())
+&& (row.situacao = 'Lançada');
+DB.historico.forEach(_marcarLancada);
+if (typeof _histCompleto !== 'undefined' && _histCompleto) _histCompleto.forEach(_marcarLancada);
 const _sl = document.getElementById('sel_loja');
 if (_sl && _perfilAtivo().toLowerCase() !== 'matriz') { _sl.value = ''; onPS('loja'); }
 filtrarHist();
@@ -2336,11 +2342,12 @@ if (jaExiste) {
 google.script.run
 .withSuccessHandler(r2 => {
 if (r2.ok) {
-DB.historico.forEach(row => {
-if (String(row.danf).trim()===String(danf).trim() &&
-(row.loja||'').trim().toLowerCase()===lojaDestino.toLowerCase())
-row.situacao='Lançada';
-});
+const _marcarLancada2 = row =>
+(String(row.danf).trim()===String(danf).trim() &&
+ (row.loja||'').trim().toLowerCase()===lojaDestino.toLowerCase())
+&& (row.situacao='Lançada');
+DB.historico.forEach(_marcarLancada2);
+if (typeof _histCompleto !== 'undefined' && _histCompleto) _histCompleto.forEach(_marcarLancada2);
 toast(`✓ Copiado! NF ${danf} em "${lojaDestino}" — ${r2.totalMarcadas||1} ocorrência(s) marcada(s) como LANÇADA!`);
 filtrarHist();
 if (document.getElementById('p-dash')?.classList.contains('on')) { gerarDash(); }
@@ -2357,7 +2364,12 @@ google.script.run
 .withSuccessHandler(res => {
 if (res.ok) {
 const hoje = new Date().toLocaleDateString('pt-BR');
-DB.historico.push(Object.assign({},novaOc,{id:res.id,data:hoje}));
+const _novoRegistro = Object.assign({},novaOc,{id:res.id,data:hoje});
+DB.historico.push(_novoRegistro);
+// Mesmo motivo dos outros dois pontos: sem isto, um registro novo
+// criado aqui só aparecia em DB.historico, sumindo da tela sempre
+// que houvesse filtro ativo (filtrarHist() lendo de _histCompleto).
+if (typeof _histCompleto !== 'undefined' && _histCompleto) _histCompleto.push(_novoRegistro);
 toast(`✓ Copiado! NF ${danf} registrada para "${lojaDestino}" como LANÇADA!`);
 filtrarHist();
 if (document.getElementById('p-dash')?.classList.contains('on')) { gerarDash(); }
