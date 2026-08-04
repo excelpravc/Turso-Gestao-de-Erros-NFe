@@ -2697,7 +2697,13 @@ function buscarHistPeriodo() {
         
         _histCarregado = true;
         filtrarHist();
-        gerarDash();
+        // A busca do Histórico NÃO deve mais disparar consulta ao Dashboard
+        // ERROS — eram duas buscas (loadHistFiltrado) rodando em paralelo,
+        // uma pro Histórico (com o período certo) e outra pro Dashboard
+        // (presa na data de hoje via dash-de/dash-ate), o que gerava o
+        // toast vermelho falso "Nenhum registro no período selecionado".
+        // O Dashboard agora só busca quando o usuário abre a aba dele
+        // (ver initDashDates()/gerarDash() disparados na navegação, linha ~1155).
         
         const fmtD = v => { const p=v.split('-'); return p[2]+'/'+p[1]+'/'+p[0]; };
         if (lbl) lbl.textContent = DB.historico.length + ' de ' + _histCompleto.length + ' registro(s) · ' + fmtD(de) + ' → ' + fmtD(ate);
