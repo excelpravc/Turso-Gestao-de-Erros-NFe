@@ -2385,6 +2385,13 @@ google.script.run
 .withSuccessHandler(r => {
 if (r.ok) {
 toast(`✓ Copiado! NF ${danf} — ${r.totalMarcadas||1} ocorrência(s) marcada(s) como LANÇADA!`);
+// Marca localmente TODAS as ocorrências dessa NF (sem filtrar por loja,
+// já que o UPDATE no servidor também não filtrou por loja aqui) — evita
+// depender de uma nova leitura ao servidor, que poderia vir de uma réplica
+// do Turso ainda não sincronizada com a escrita que acabou de acontecer.
+const _marcarLancadaTodasLojas = row => (String(row.danf).trim() === String(danf).trim()) && (row.situacao = 'Lançada');
+DB.historico.forEach(_marcarLancadaTodasLojas);
+if (typeof _histCompleto !== 'undefined' && _histCompleto) _histCompleto.forEach(_marcarLancadaTodasLojas);
 if (typeof filtrarHist === 'function') { 
     filtrarHist(); 
 } else { 
