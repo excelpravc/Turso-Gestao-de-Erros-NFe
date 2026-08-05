@@ -2385,9 +2385,11 @@ google.script.run
 .withSuccessHandler(r => {
 if (r.ok) {
 toast(`✓ Copiado! NF ${danf} — ${r.totalMarcadas||1} ocorrência(s) marcada(s) como LANÇADA!`);
-setTimeout(()=>{
-buscarHistPeriodo();
-}, 500);
+if (typeof filtrarHist === 'function') { 
+    filtrarHist(); 
+} else { 
+    renderTblHist(); 
+}
 } else {
 toast('✓ Copiado! (NF não encontrada no histórico)');
 }
