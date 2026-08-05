@@ -2314,7 +2314,6 @@ if (typeof _histCompleto !== 'undefined' && _histCompleto) _histCompleto.forEach
 const _sl = document.getElementById('sel_loja');
 if (_sl && _perfilAtivo().toLowerCase() !== 'matriz') { _sl.value = ''; onPS('loja'); }
 filtrarHist();
-if (document.getElementById('p-dash')?.classList.contains('on')) { gerarDash(); }
 } else {
 const lojaEl    = document.getElementById('sel_loja');
 const lojaOpt   = lojaEl ? lojaEl.options[lojaEl.selectedIndex] : null;
@@ -2350,7 +2349,6 @@ DB.historico.forEach(_marcarLancada2);
 if (typeof _histCompleto !== 'undefined' && _histCompleto) _histCompleto.forEach(_marcarLancada2);
 toast(`✓ Copiado! NF ${danf} em "${lojaDestino}" — ${r2.totalMarcadas||1} ocorrência(s) marcada(s) como LANÇADA!`);
 filtrarHist();
-if (document.getElementById('p-dash')?.classList.contains('on')) { gerarDash(); }
 } else { toast('✓ Copiado! (falha ao marcar como lançada)', true); }
 })
 .withFailureHandler(()=>toast('✓ Copiado! (falha ao marcar como lançada)',true))
@@ -2372,7 +2370,6 @@ DB.historico.push(_novoRegistro);
 if (typeof _histCompleto !== 'undefined' && _histCompleto) _histCompleto.push(_novoRegistro);
 toast(`✓ Copiado! NF ${danf} registrada para "${lojaDestino}" como LANÇADA!`);
 filtrarHist();
-if (document.getElementById('p-dash')?.classList.contains('on')) { gerarDash(); }
 } else { toast('✓ Copiado! (falha ao registrar S/ERRO)',true); }
 })
 .withFailureHandler(()=>toast('✓ Copiado! (falha ao registrar S/ERRO)',true))
@@ -2390,7 +2387,6 @@ if (r.ok) {
 toast(`✓ Copiado! NF ${danf} — ${r.totalMarcadas||1} ocorrência(s) marcada(s) como LANÇADA!`);
 setTimeout(()=>{
 buscarHistPeriodo();
-if (document.getElementById('p-dash')?.classList.contains('on')) { gerarDash(); }
 }, 500);
 } else {
 toast('✓ Copiado! (NF não encontrada no histórico)');
@@ -2975,7 +2971,12 @@ toast('✓ PDF gerado com sucesso!');
 }
 // ── EDITAR HISTÓRICO ──
 function openEditHist(id){
-const item = DB.historico.find(x => Number(x.id) === Number(id));
+// Busca em _histCompleto primeiro — é o array que realmente corresponde
+// ao que está sendo exibido na tela quando há algum filtro ativo
+// (filtrarHist() usa _histCompleto nesse caso). DB.historico só serve
+// de fallback para compatibilidade com fluxos antigos.
+const fonte = (typeof _histCompleto !== 'undefined' && _histCompleto && _histCompleto.length) ? _histCompleto : DB.historico;
+const item = fonte.find(x => Number(x.id) === Number(id));
 if(!item){
 toast('⏳ Carregando...');
 google.script.run
@@ -3126,7 +3127,8 @@ const btn=document.querySelector('#modal-bg .btn-p[onclick="modalSave()"]');
 if(btn){btn.textContent='⏳ Salvando…';btn.disabled=true;}
 const restore=()=>{if(btn){btn.textContent='💾 Salvar';btn.disabled=false;}};
 if(_mod.type==='hist'){
-const item=DB.historico.find(x=>x.id===_mod.id);if(!item){restore();return;}
+const fonteHist = (typeof _histCompleto !== 'undefined' && _histCompleto && _histCompleto.length) ? _histCompleto : DB.historico;
+const item=fonteHist.find(x=>Number(x.id)===Number(_mod.id));if(!item){restore();toast('Registro não encontrado — tente buscar o período novamente.', true);return;}
 const fornManual=document.getElementById('mf1-manual')?.checked;
 const fornVal=fornManual?(document.getElementById('mf1-custom')?.value?.trim()||''):(document.getElementById('mf1')?.value?.trim()||'');
 const lojaVal=document.getElementById('mf2')?.value?.trim()||'';
@@ -3157,9 +3159,11 @@ google.script.run
 restore();
 if(r.ok){
 toast('✓ Atualizado!');closeModal();
-const situacaoAnterior=(DB.historico.find(x=>x.id===_mod.id)||{}).situacao||'Pendente';
-const idx=DB.historico.findIndex(x=>x.id===_mod.id);
+const situacaoAnterior=(DB.historico.find(x=>Number(x.id)===Number(_mod.id))||{}).situacao||'Pendente';
+const idx=DB.historico.findIndex(x=>Number(x.id)===Number(_mod.id));
 if(idx>=0)DB.historico[idx]=data;
+const idxCompleto=(typeof _histCompleto !== 'undefined' && _histCompleto) ? _histCompleto.findIndex(x=>Number(x.id)===Number(_mod.id)) : -1;
+if(idxCompleto>=0)_histCompleto[idxCompleto]=data;
 const situacaoNova=data.situacao;
 if(situacaoNova!==situacaoAnterior){
 const outrasNFs=DB.historico.filter(row=>
@@ -3173,7 +3177,10 @@ google.script.run.updateHistorico(Object.assign({},row,{situacao:situacaoNova,pe
 });
 }
 if(typeof filtrarHist==='function'){filtrarHist();}else{renderTblHist();}
-gerarDash();
+// gerarDash() removido daqui — editar um registro do Histórico não deve
+// mais sobrescrever DB.historico com os dados do Dashboard ERROS (que
+// usa outro período, travado em dash-de/dash-ate). Era isso que fazia
+// o botão Editar "não funcionar" quando havia filtro ativo no Histórico.
 }else toast('Erro!',true);
 })
 .withFailureHandler(e=>{restore();toast(e.message,true);})
