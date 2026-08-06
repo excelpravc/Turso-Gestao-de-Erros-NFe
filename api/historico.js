@@ -33,7 +33,8 @@ function linhaParaObjeto(row) {
   const extra = row.payload ? JSON.parse(row.payload) : {};
   return Object.assign({}, extra, {
     id: row.id, data: row.data, danf: row.danf, loja: row.loja, fornecedor: row.fornecedor,
-    erroDesc: row.erroDesc, comprador: row.comprador, status: row.status, situacao: row.situacao
+    erroDesc: row.erroDesc, comprador: row.comprador, status: row.status, situacao: row.situacao,
+    atualizadoEm: row.atualizadoEm
   });
 }
 
@@ -77,10 +78,16 @@ module.exports = async function handler(req, res) {
       }
 
       // modo=delta: usado pelo polling do frontend (substitui onSnapshot).
-      // Devolve tudo que tem id > sinceId, pra aplicar como "docChanges" incremental.
+      // Antes comparava por id > sinceId — o que só pega registros NOVOS e
+      // nunca detecta um UPDATE num registro já existente (ex.: marcar uma
+      // NF como Lançada não muda o id dela). Agora compara por atualizadoEm,
+      // que é regravado em todo INSERT e todo UPDATE — assim edições e
+      // mudanças de situação também entram no delta.
       if (q.modo === 'delta') {
-        const sinceId = Number(q.sinceId) || 0;
-        const rs = await db.execute({ sql: `SELECT * FROM ${t} WHERE id > ? ORDER BY id ASC`, args: [sinceId] });
+        const desde = q.desde || '';
+        const rs = desde
+          ? await db.execute({ sql: `SELECT * FROM ${t} WHERE atualizadoEm > ? ORDER BY id ASC`, args: [desde] })
+          : await db.execute(`SELECT * FROM ${t} ORDER BY id ASC`);
         return res.status(200).json({ ok: true, rows: rs.rows.map(linhaParaObjeto) });
       }
 
@@ -92,11 +99,12 @@ module.exports = async function handler(req, res) {
       const data = Object.assign({}, body);
       if (!data.data) data.data = hojeBR();
       const extra = {};
-      Object.keys(data).forEach(k => { if (!COLS_PROPRIAS.includes(k) && k !== 'perfil' && k !== 'tenantId') extra[k] = data[k]; });
+      Object.keys(data).forEach(k => { if (!COLS_PROPRIAS.includes(k) && k !== 'perfil' && k !== 'tenantId' && k !== 'atualizadoEm') extra[k] = data[k]; });
+      const agora = new Date().toISOString();
       const rs = await db.execute({
-        sql: `INSERT INTO ${t} (data, danf, loja, fornecedor, erroDesc, comprador, status, situacao, payload) VALUES (?,?,?,?,?,?,?,?,?)`,
+        sql: `INSERT INTO ${t} (data, danf, loja, fornecedor, erroDesc, comprador, status, situacao, payload, atualizadoEm) VALUES (?,?,?,?,?,?,?,?,?,?)`,
         args: [data.data, data.danf || null, data.loja || null, data.fornecedor || null, data.erroDesc || null,
-               data.comprador || null, data.status || null, data.situacao || null, JSON.stringify(extra)]
+               data.comprador || null, data.status || null, data.situacao || null, JSON.stringify(extra), agora]
       });
       return res.status(200).json({ ok: true, id: Number(rs.lastInsertRowid) });
     }
@@ -106,8 +114,9 @@ module.exports = async function handler(req, res) {
 
       if (q.modo === 'situacao-por-danf') {
         const { danf, loja } = body;
-        let sql = `UPDATE ${t} SET situacao = 'Lançada' WHERE danf = ?`;
-        const args = [String(danf || '').trim()];
+        const agora = new Date().toISOString();
+        let sql = `UPDATE ${t} SET situacao = 'Lançada', atualizadoEm = ? WHERE danf = ?`;
+        const args = [agora, String(danf || '').trim()];
         if (loja) { sql += ' AND LOWER(TRIM(loja)) = LOWER(TRIM(?))'; args.push(loja); }
         const rs = await db.execute({ sql, args });
         return res.status(200).json({ ok: rs.rowsAffected > 0, totalMarcadas: rs.rowsAffected });
@@ -119,11 +128,12 @@ module.exports = async function handler(req, res) {
       const atualObj = linhaParaObjeto(atual.rows[0]);
       const merged = Object.assign({}, atualObj, body);
       const extra = {};
-      Object.keys(merged).forEach(k => { if (!COLS_PROPRIAS.includes(k) && k !== 'id' && k !== 'perfil' && k !== 'tenantId') extra[k] = merged[k]; });
+      Object.keys(merged).forEach(k => { if (!COLS_PROPRIAS.includes(k) && k !== 'id' && k !== 'perfil' && k !== 'tenantId' && k !== 'atualizadoEm') extra[k] = merged[k]; });
+      const agora = new Date().toISOString();
       await db.execute({
-        sql: `UPDATE ${t} SET data=?, danf=?, loja=?, fornecedor=?, erroDesc=?, comprador=?, status=?, situacao=?, payload=? WHERE id=?`,
+        sql: `UPDATE ${t} SET data=?, danf=?, loja=?, fornecedor=?, erroDesc=?, comprador=?, status=?, situacao=?, payload=?, atualizadoEm=? WHERE id=?`,
         args: [merged.data, merged.danf || null, merged.loja || null, merged.fornecedor || null, merged.erroDesc || null,
-               merged.comprador || null, merged.status || null, merged.situacao || null, JSON.stringify(extra), body.id]
+               merged.comprador || null, merged.status || null, merged.situacao || null, JSON.stringify(extra), agora, body.id]
       });
       return res.status(200).json({ ok: true });
     }
