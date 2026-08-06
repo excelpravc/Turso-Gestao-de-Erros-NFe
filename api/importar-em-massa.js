@@ -29,7 +29,6 @@ module.exports = async function handler(req, res) {
       const CHUNK = 450; // mesmo tamanho de lote do batch() original
       let importados = 0;
       let primeiroId = null;
-      const agora = new Date().toISOString();
 
       for (let i = 0; i < rows.length; i += CHUNK) {
         const parte = rows.slice(i, i + CHUNK);
@@ -37,9 +36,9 @@ module.exports = async function handler(req, res) {
           if (TABELAS_HISTORICO.has(colecao)) {
             const { data, danf, loja, fornecedor, erroDesc, comprador, status, situacao, ...resto } = row;
             return {
-              sql: `INSERT INTO ${colecao} (data, danf, loja, fornecedor, erroDesc, comprador, status, situacao, payload, atualizadoEm) VALUES (?,?,?,?,?,?,?,?,?,?)`,
+              sql: `INSERT INTO ${colecao} (data, danf, loja, fornecedor, erroDesc, comprador, status, situacao, payload) VALUES (?,?,?,?,?,?,?,?,?)`,
               args: [data || null, danf || null, loja || null, fornecedor || null, erroDesc || null,
-                     comprador || null, status || null, situacao || null, JSON.stringify(resto), agora]
+                     comprador || null, status || null, situacao || null, JSON.stringify(resto)]
             };
           }
           return { sql: `INSERT INTO ${colecao} (payload) VALUES (?)`, args: [JSON.stringify(row)] };
