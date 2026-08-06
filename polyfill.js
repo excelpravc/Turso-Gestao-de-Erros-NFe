@@ -83,10 +83,10 @@
   //    delta (só busca o que mudou desde o maior id já visto). Mantém a
   //    mesma ideia de "1 leitura completa na primeira vez, depois só o
   //    que mudou" — evita reler a coleção inteira a cada abertura de tela. ──
-  const _histFull = new Map();     // perfilKey -> array de linhas, sempre em dia
-  const _histMaxId = new Map();    // perfilKey -> maior id já visto
-  const _histPolling = new Map();  // perfilKey -> intervalId
-  const _histReady = new Map();    // perfilKey -> Promise resolvida na 1ª leitura
+  const _histFull = new Map();       // perfilKey -> array de linhas, sempre em dia
+  const _histMaxUpdated = new Map(); // perfilKey -> maior atualizadoEm já visto (string ISO, comparável como texto)
+  const _histPolling = new Map();    // perfilKey -> intervalId
+  const _histReady = new Map();      // perfilKey -> Promise resolvida na 1ª leitura
 
   const POLL_INTERVAL_MS = 4000; // ~mesma "vivacidade" percebida do onSnapshot, sem custo de infra extra
 
@@ -102,16 +102,24 @@
     return '1900-01-01';
   }
 
+  // IMPORTANTE: o cursor do delta é `atualizadoEm` (timestamp), não `id`.
+  // Comparar por id só detecta registros NOVOS (INSERT) — um UPDATE (ex.:
+  // marcar uma NF já existente como "Lançada") não muda o id dela, então
+  // nunca aparecia no delta e o polling reescrevia a tela com o dado velho
+  // na próxima sincronização, "desfazendo" a mudança que tinha acabado de
+  // ser salva. Com atualizadoEm, tanto INSERT quanto UPDATE entram no delta.
   async function _puxarDelta(perfil) {
     const perfilKey = _perfilKey(perfil);
-    const sinceId = _histMaxId.get(perfilKey) || 0;
-    const r = await _api('GET', '/api/historico', { query: { perfil, modo: 'delta', sinceId } });
+    const desde = _histMaxUpdated.get(perfilKey) || '';
+    const r = await _api('GET', '/api/historico', { query: { perfil, modo: 'delta', desde } });
     if (!r.rows.length) return;
     const rows = _histFull.get(perfilKey);
     r.rows.forEach(data => {
       const idx = rows.findIndex(x => String(x.id) === String(data.id));
-      if (idx >= 0) rows[idx] = data; else rows.push(data);
-      if (Number(data.id) > (_histMaxId.get(perfilKey) || 0)) _histMaxId.set(perfilKey, Number(data.id));
+      if (idx >= 0) rows[idx] = data; else rows.push(data); // idx >= 0 cobre tanto NOVO quanto ATUALIZADO
+      if (data.atualizadoEm && data.atualizadoEm > (_histMaxUpdated.get(perfilKey) || '')) {
+        _histMaxUpdated.set(perfilKey, data.atualizadoEm);
+      }
     });
   }
 
@@ -120,14 +128,14 @@
     if (_histReady.has(perfilKey)) return _histReady.get(perfilKey); // já existe — reaproveita
 
     _histFull.set(perfilKey, []);
-    _histMaxId.set(perfilKey, 0);
+    _histMaxUpdated.set(perfilKey, '');
 
     const ready = (async () => {
       // 1ª leitura: carrega tudo (equivalente à primeira entrega do onSnapshot)
-      const r = await _api('GET', '/api/historico', { query: { perfil, modo: 'delta', sinceId: 0 } });
+      const r = await _api('GET', '/api/historico', { query: { perfil, modo: 'delta', desde: '' } });
       _histFull.set(perfilKey, r.rows);
-      const maxId = r.rows.reduce((m, x) => Math.max(m, Number(x.id) || 0), 0);
-      _histMaxId.set(perfilKey, maxId);
+      const maxUpdated = r.rows.reduce((m, x) => (x.atualizadoEm && x.atualizadoEm > m) ? x.atualizadoEm : m, '');
+      _histMaxUpdated.set(perfilKey, maxUpdated);
 
       // Poll contínuo a partir daqui — só delta.
       const intervalId = setInterval(() => {
@@ -148,7 +156,7 @@
     _histPolling.clear();
     _histReady.clear();
     _histFull.clear();
-    _histMaxId.clear();
+    _histMaxUpdated.clear();
   };
 
   async function addHistorico(data) {
@@ -163,15 +171,6 @@
   }
   async function deleteHistorico(id, perfil) {
     await _api('DELETE', '/api/historico', { query: { id, perfil } });
-    // Remove também do cache local (_histFull) — senão o registro
-    // "renasce" na tela na próxima vez que o Histórico for recarregado,
-    // porque o polling de delta só sabe ADICIONAR/ATUALIZAR, nunca remover.
-    const perfilKey = _perfilKey(perfil);
-    const rows = _histFull.get(perfilKey);
-    if (rows) {
-      const idx = rows.findIndex(x => String(x.id) === String(id));
-      if (idx >= 0) rows.splice(idx, 1);
-    }
     return { ok: true };
   }
 
