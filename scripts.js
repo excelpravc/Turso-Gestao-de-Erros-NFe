@@ -2385,6 +2385,13 @@ google.script.run
 .withSuccessHandler(r => {
 if (r.ok) {
 toast(`✓ Copiado! NF ${danf} — ${r.totalMarcadas||1} ocorrência(s) marcada(s) como LANÇADA!`);
+
+// ATUALIZAÇÃO DA MEMÓRIA LOCAL QUANDO NÃO HÁ LOJA (EX: PERFIL MATRIZ)
+const _marcarLancadaSemLoja = row => 
+    (String(row.danf).trim() === String(danf).trim()) && (row.situacao = 'Lançada');
+DB.historico.forEach(_marcarLancadaSemLoja);
+if (typeof _histCompleto !== 'undefined' && _histCompleto) _histCompleto.forEach(_marcarLancadaSemLoja);
+
 if (typeof filtrarHist === 'function') { 
     filtrarHist(); 
 } else { 
