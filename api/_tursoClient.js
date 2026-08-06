@@ -94,12 +94,14 @@ async function criarSchemaTenant(tursoUrl, tursoToken) {
     `CREATE TABLE IF NOT EXISTS historico_matriz (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       data TEXT, danf TEXT, loja TEXT, fornecedor TEXT,
-      erroDesc TEXT, comprador TEXT, status TEXT, situacao TEXT, payload TEXT
+      erroDesc TEXT, comprador TEXT, status TEXT, situacao TEXT, payload TEXT,
+      atualizadoEm TEXT
     )`,
     `CREATE TABLE IF NOT EXISTS historico_lojas (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       data TEXT, danf TEXT, loja TEXT, fornecedor TEXT,
-      erroDesc TEXT, comprador TEXT, status TEXT, situacao TEXT, payload TEXT
+      erroDesc TEXT, comprador TEXT, status TEXT, situacao TEXT, payload TEXT,
+      atualizadoEm TEXT
     )`,
     // Índices na coluna danf — sem isso, toda vez que uma NF é marcada
     // como "Lançada" (UPDATE ... WHERE danf = ?) o SQLite escaneia a
@@ -107,11 +109,32 @@ async function criarSchemaTenant(tursoUrl, tursoToken) {
     // read" do Turso proporcional ao tamanho da tabela a cada clique.
     // Com o índice, vai direto na linha certa.
     `CREATE INDEX IF NOT EXISTS idx_historico_matriz_danf ON historico_matriz(danf)`,
-    `CREATE INDEX IF NOT EXISTS idx_historico_lojas_danf ON historico_lojas(danf)`
+    `CREATE INDEX IF NOT EXISTS idx_historico_lojas_danf ON historico_lojas(danf)`,
+    // Índice em atualizadoEm — usado pelo polling do frontend (modo=delta)
+    // para saber quais registros mudaram desde a última checagem, incluindo
+    // UPDATEs (não só INSERTs novos). Sem isso, marcar uma NF já existente
+    // como "Lançada" não muda o id dela e nunca aparecia no delta — o
+    // polling reescrevia a tela com o dado velho na sincronização seguinte.
+    `CREATE INDEX IF NOT EXISTS idx_historico_matriz_atualizado ON historico_matriz(atualizadoEm)`,
+    `CREATE INDEX IF NOT EXISTS idx_historico_lojas_atualizado ON historico_lojas(atualizadoEm)`
   ];
 
   for (const sql of statements) {
     await db.execute(sql);
+  }
+
+  // Migração pra bancos de tenant que já existiam ANTES desta coluna —
+  // CREATE TABLE IF NOT EXISTS não adiciona coluna em tabela já criada.
+  // SQLite não tem "ADD COLUMN IF NOT EXISTS", então tentamos e ignoramos
+  // o erro "duplicate column" se ela já tiver sido adicionada antes.
+  const migracoes = [
+    `ALTER TABLE historico_matriz ADD COLUMN atualizadoEm TEXT`,
+    `ALTER TABLE historico_lojas ADD COLUMN atualizadoEm TEXT`
+  ];
+  for (const sql of migracoes) {
+    try { await db.execute(sql); } catch (e) {
+      if (!/duplicate column/i.test(e.message || '')) throw e;
+    }
   }
 }
 
