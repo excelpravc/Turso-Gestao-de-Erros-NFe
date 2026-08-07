@@ -2305,15 +2305,29 @@ toast(`✓ Copiado! NF ${danf} — ${r.totalMarcadas||1} ocorrência(s) marcada(
 // a tela ficava mostrando "Pendente" mesmo após a confirmação, porque
 // filtrarHist() lê de _histCompleto quando há filtro, e esse array
 // nunca era tocado — só sincronizava depois, na próxima busca.
-const _marcarLancada = row =>
-(String(row.danf).trim() === String(danf).trim() &&
- (row.loja||'').trim().toLowerCase() === loja.trim().toLowerCase())
-&& (row.situacao = 'Lançada');
+const _lojaAlvoLow = (loja || '').trim().toLowerCase();
+const _bateNF = row => String(row.danf).trim() === String(danf).trim() &&
+(row.loja||'').trim().toLowerCase() === _lojaAlvoLow;
+const _marcarLancada = row => _bateNF(row) && (row.situacao = 'Lançada');
+const _qtdLocalAntes =
+DB.historico.filter(_bateNF).length +
+((typeof _histCompleto !== 'undefined' && _histCompleto) ? _histCompleto.filter(_bateNF).length : 0);
 DB.historico.forEach(_marcarLancada);
 if (typeof _histCompleto !== 'undefined' && _histCompleto) _histCompleto.forEach(_marcarLancada);
 const _sl = document.getElementById('sel_loja');
 if (_sl && _perfilAtivo().toLowerCase() !== 'matriz') { _sl.value = ''; onPS('loja'); }
 filtrarHist();
+// SALVAGUARDA: o backend confirmou a marcação (r.ok/totalMarcadas), mas
+// nenhuma linha em memória bateu com danf+loja (ex.: diferença sutil de
+// espaço/acentuação, ou registro ainda não estava carregado na tela).
+// É esse caso que fazia o toast dizer "sucesso" e a tela continuar
+// "Pendente" até o usuário repetir a ação. Aqui, se ninguém local bateu,
+// força uma rebusca do período para resincronizar com o servidor.
+if (_qtdLocalAntes === 0) {
+const _hde = document.getElementById('hist-de')?.value;
+const _hate = document.getElementById('hist-ate')?.value;
+if (_hde && _hate) buscarHistPeriodo();
+}
 } else {
 const lojaEl    = document.getElementById('sel_loja');
 const lojaOpt   = lojaEl ? lojaEl.options[lojaEl.selectedIndex] : null;
@@ -2387,8 +2401,11 @@ if (r.ok) {
 toast(`✓ Copiado! NF ${danf} — ${r.totalMarcadas||1} ocorrência(s) marcada(s) como LANÇADA!`);
 
 // ATUALIZAÇÃO DA MEMÓRIA LOCAL QUANDO NÃO HÁ LOJA (EX: PERFIL MATRIZ)
-const _marcarLancadaSemLoja = row => 
-    (String(row.danf).trim() === String(danf).trim()) && (row.situacao = 'Lançada');
+const _bateNFSemLoja = row => String(row.danf).trim() === String(danf).trim();
+const _marcarLancadaSemLoja = row => _bateNFSemLoja(row) && (row.situacao = 'Lançada');
+const _qtdLocalAntesSemLoja =
+DB.historico.filter(_bateNFSemLoja).length +
+((typeof _histCompleto !== 'undefined' && _histCompleto) ? _histCompleto.filter(_bateNFSemLoja).length : 0);
 DB.historico.forEach(_marcarLancadaSemLoja);
 if (typeof _histCompleto !== 'undefined' && _histCompleto) _histCompleto.forEach(_marcarLancadaSemLoja);
 
@@ -2396,6 +2413,14 @@ if (typeof filtrarHist === 'function') {
     filtrarHist(); 
 } else { 
     renderTblHist(); 
+}
+// SALVAGUARDA: mesmo caso do perfil Lojas — se o servidor confirmou mas
+// nada bateu localmente, força rebusca do período em vez de deixar a
+// tela "presa" em Pendente até o usuário repetir a ação.
+if (_qtdLocalAntesSemLoja === 0) {
+const _hdeM = document.getElementById('hist-de')?.value;
+const _hateM = document.getElementById('hist-ate')?.value;
+if (_hdeM && _hateM) buscarHistPeriodo();
 }
 } else {
 toast('✓ Copiado! (NF não encontrada no histórico)');
